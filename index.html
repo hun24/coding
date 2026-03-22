@@ -1,445 +1,375 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Volume2, Clock, CalendarDays } from 'lucide-react';
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>수능/모의고사 실전 타이머</title>
+  <!-- React & Babel & Tailwind CSS (CDN 연동) -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #020617; color: #f8fafc; font-family: 'Pretendard', sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
 
-// --- [데이터 정의] 수능/모의고사 시간표 (2028학년도 2022개정 기준) ---
-const examSchedule = [
-  { id: '1', name: '1교시 국어', start: '08:40', end: '10:00', type: 'exam' },
-  { id: 'break1', name: '쉬는 시간', start: '10:00', end: '10:30', type: 'break' },
-  { id: '2', name: '2교시 수학', start: '10:30', end: '12:10', type: 'exam' },
-  { id: 'lunch', name: '점심시간', start: '12:10', end: '13:10', type: 'break' },
-  { id: '3', name: '3교시 영어', start: '13:10', end: '14:20', type: 'exam' },
-  { id: 'break2', name: '쉬는 시간', start: '14:20', end: '14:50', type: 'break' },
-  { id: '4-1', name: '4교시 한국사', start: '14:50', end: '15:20', type: 'exam' },
-  { id: '4-prep', name: '한국사 수거/탐구 배부', start: '15:20', end: '15:35', type: 'break' },
-  { id: '4-2', name: '4교시 통합사회', start: '15:35', end: '16:15', type: 'exam' },
-  { id: '4-prep2', name: '문제지 회수 및 대기', start: '16:15', end: '16:30', type: 'break' },
-  { id: '4-3', name: '4교시 통합과학', start: '16:30', end: '17:10', type: 'exam' },
-];
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
 
-// --- [데이터 정의] 타종 및 방송 이벤트 (MP3 파일 매핑) ---
-// ready1: 10분 전 (예비령, 종료 10분 전)
-// ready2: 5분 전 (준비령, 종료 5분 전)
-// start: 시작령 (본령)
-// end: 종료령
-const bellEvents = {
-  '08:30:00': { type: 'ready1', text: '1교시 예비령 (10분 전)' },
-  '08:35:00': { type: 'ready2', text: '1교시 준비령 (5분 전)' },
-  '08:40:00': { type: 'start', text: '1교시 시작' },
-  '09:50:00': { type: 'ready1', text: '1교시 종료 10분 전' },
-  '10:00:00': { type: 'end', text: '1교시 종료' },
-  
-  '10:20:00': { type: 'ready1', text: '2교시 예비령 (10분 전)' },
-  '10:25:00': { type: 'ready2', text: '2교시 준비령 (5분 전)' },
-  '10:30:00': { type: 'start', text: '2교시 시작' },
-  '12:00:00': { type: 'ready1', text: '2교시 종료 10분 전' },
-  '12:10:00': { type: 'end', text: '2교시 종료' },
-  
-  '13:00:00': { type: 'ready1', text: '3교시 예비령 (10분 전)' },
-  '13:05:00': { type: 'ready2', text: '3교시 준비령 (5분 전)' },
-  '13:10:00': { type: 'start', text: '3교시 시작' },
-  '14:10:00': { type: 'ready1', text: '3교시 종료 10분 전' },
-  '14:20:00': { type: 'end', text: '3교시 종료' },
-  
-  '14:40:00': { type: 'ready1', text: '4교시 예비령 (10분 전)' },
-  '14:45:00': { type: 'ready2', text: '4교시 준비령 (5분 전)' },
-  '14:50:00': { type: 'start', text: '한국사 시작' },
-  '15:15:00': { type: 'ready2', text: '한국사 종료 5분 전' },
-  '15:20:00': { type: 'end', text: '한국사 종료' },
-  
-  '15:35:00': { type: 'start', text: '통합사회 시작' },
-  '16:10:00': { type: 'ready2', text: '통합사회 종료 5분 전' },
-  '16:15:00': { type: 'end', text: '통합사회 종료' },
-  
-  '16:30:00': { type: 'start', text: '통합과학 시작' },
-  '17:05:00': { type: 'ready2', text: '통합과학 종료 5분 전' },
-  '17:10:00': { type: 'end', text: '탐구 영역 및 시험 종료' },
-};
+    // --- [아이콘 SVG 컴포넌트] ---
+    const ClockIcon = ({className}) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>);
+    const PlayIcon = ({className}) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="5 3 19 12 5 21 5 3"/></svg>);
+    const PauseIcon = ({className}) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>);
+    const RotateCcwIcon = ({className}) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>);
+    const Volume2Icon = ({className}) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>);
+    const CalendarDaysIcon = ({className}) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>);
 
-export default function App() {
-  const [started, setStarted] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0); 
-  const [isRunning, setIsRunning] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [timeMultiplier, setTimeMultiplier] = useState(1);
-  const [realTimeMode, setRealTimeMode] = useState(false);
-  const [lastPlayedText, setLastPlayedText] = useState("대기 중");
-  
-  const lastPlayedBellRef = useRef(null);
-  const currentAudioRef = useRef(null); // 현재 재생 중인 오디오 객체 저장
+    // --- [데이터 정의] 수능/모의고사 시간표 (2028학년도 2022개정 기준) ---
+    const examSchedule = [
+      { id: '1', name: '1교시 국어', start: '08:40', end: '10:00', type: 'exam' },
+      { id: 'break1', name: '쉬는 시간', start: '10:00', end: '10:30', type: 'break' },
+      { id: '2', name: '2교시 수학', start: '10:30', end: '12:10', type: 'exam' },
+      { id: 'lunch', name: '점심시간', start: '12:10', end: '13:10', type: 'break' },
+      { id: '3', name: '3교시 영어', start: '13:10', end: '14:20', type: 'exam' },
+      { id: 'break2', name: '쉬는 시간', start: '14:20', end: '14:50', type: 'break' },
+      { id: '4-1', name: '4교시 한국사', start: '14:50', end: '15:20', type: 'exam' },
+      { id: '4-prep', name: '한국사 수거/탐구 배부', start: '15:20', end: '15:35', type: 'break' },
+      { id: '4-2', name: '4교시 통합사회', start: '15:35', end: '16:15', type: 'exam' },
+      { id: '4-prep2', name: '문제지 회수 및 대기', start: '16:15', end: '16:30', type: 'break' },
+      { id: '4-3', name: '4교시 통합과학', start: '16:30', end: '17:10', type: 'exam' },
+    ];
 
-  // --- 유틸리티 함수: 시간 변환 ---
-  const timeToSeconds = (timeStr) => {
-    const [h, m, s = 0] = timeStr.split(':').map(Number);
-    return h * 3600 + m * 60 + s;
-  };
-
-  const formatTime = (totalSeconds) => {
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = Math.floor(totalSeconds % 60);
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
-
-  // --- TTS (음성 합성) 시스템: MP3 실패 시 대체용 ---
-  const speak = (text) => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'ko-KR';
-    utterance.rate = 0.9;
-    window.speechSynthesis.speak(utterance);
-  };
-
-  // --- MP3 재생 시스템 ---
-  const stopAudio = () => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current.currentTime = 0;
-      currentAudioRef.current = null;
-    }
-  };
-
-  const playAudio = (type, fallbackText) => {
-    if (isMuted) return;
-    
-    stopAudio(); // 새로운 음원 재생 전 기존 음원 정지
-
-    const audioUrls = {
-      'ready1': 'ready1.mp3',
-      'ready2': 'ready2.mp3',
-      'start': 'start.mp3',
-      'end': 'end.mp3'
+    // --- [데이터 정의] 타종 및 방송 이벤트 (MP3 파일 매핑) ---
+    const bellEvents = {
+      '08:30:00': { type: 'ready1', text: '1교시 예비령 (10분 전)' },
+      '08:35:00': { type: 'ready2', text: '1교시 준비령 (5분 전)' },
+      '08:40:00': { type: 'start', text: '1교시 시작' },
+      '09:50:00': { type: 'ready1', text: '1교시 종료 10분 전' },
+      '10:00:00': { type: 'end', text: '1교시 종료' },
+      '10:20:00': { type: 'ready1', text: '2교시 예비령 (10분 전)' },
+      '10:25:00': { type: 'ready2', text: '2교시 준비령 (5분 전)' },
+      '10:30:00': { type: 'start', text: '2교시 시작' },
+      '12:00:00': { type: 'ready1', text: '2교시 종료 10분 전' },
+      '12:10:00': { type: 'end', text: '2교시 종료' },
+      '13:00:00': { type: 'ready1', text: '3교시 예비령 (10분 전)' },
+      '13:05:00': { type: 'ready2', text: '3교시 준비령 (5분 전)' },
+      '13:10:00': { type: 'start', text: '3교시 시작' },
+      '14:10:00': { type: 'ready1', text: '3교시 종료 10분 전' },
+      '14:20:00': { type: 'end', text: '3교시 종료' },
+      '14:40:00': { type: 'ready1', text: '4교시 예비령 (10분 전)' },
+      '14:45:00': { type: 'ready2', text: '4교시 준비령 (5분 전)' },
+      '14:50:00': { type: 'start', text: '한국사 시작' },
+      '15:15:00': { type: 'ready2', text: '한국사 종료 5분 전' },
+      '15:20:00': { type: 'end', text: '한국사 종료' },
+      '15:35:00': { type: 'start', text: '통합사회 시작' },
+      '16:10:00': { type: 'ready2', text: '통합사회 종료 5분 전' },
+      '16:15:00': { type: 'end', text: '통합사회 종료' },
+      '16:30:00': { type: 'start', text: '통합과학 시작' },
+      '17:05:00': { type: 'ready2', text: '통합과학 종료 5분 전' },
+      '17:10:00': { type: 'end', text: '탐구 영역 및 시험 종료' },
     };
 
-    const targetUrl = audioUrls[type];
-    if (targetUrl) {
-      const audio = new Audio(targetUrl);
-      currentAudioRef.current = audio;
+    function App() {
+      const [started, setStarted] = useState(false);
+      const [currentTime, setCurrentTime] = useState(0); 
+      const [isRunning, setIsRunning] = useState(false);
+      const [isMuted, setIsMuted] = useState(false);
+      const [timeMultiplier, setTimeMultiplier] = useState(1);
+      const [realTimeMode, setRealTimeMode] = useState(false);
+      const [lastPlayedText, setLastPlayedText] = useState("대기 중");
       
-      // 파일이 없거나(현재 미리보기 화면 등) 로드 에러가 날 경우 TTS로 대체
-      audio.onerror = () => {
-        console.warn(`오디오 파일(${targetUrl})을 찾을 수 없어 TTS로 대체합니다.`);
-        speak(fallbackText);
+      const lastPlayedBellRef = useRef(null);
+      const currentAudioRef = useRef(null);
+
+      const timeToSeconds = (timeStr) => {
+        const [h, m, s = 0] = timeStr.split(':').map(Number);
+        return h * 3600 + m * 60 + s;
       };
 
-      audio.play().catch(e => {
-        console.warn("오디오 재생 실패 (브라우저 정책 이슈 등):", e);
-        speak(fallbackText);
-      });
-    } else {
-      speak(fallbackText);
-    }
-  };
+      const formatTime = (totalSeconds) => {
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const s = Math.floor(totalSeconds % 60);
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      };
 
-  const triggerEvent = (eventData) => {
-    setLastPlayedText(eventData.text);
-    playAudio(eventData.type, eventData.text);
-  };
+      // --- TTS (음성 합성) 시스템: MP3 실패 시 대체용 ---
+      const speak = (text) => {
+        if (!('speechSynthesis' in window)) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'ko-KR';
+        utterance.rate = 0.9;
+        window.speechSynthesis.speak(utterance);
+      };
 
-  const handleTestAudio = () => {
-    setLastPlayedText("오디오 테스트 (start.mp3)");
-    playAudio('start', "오디오 파일이 없어 기계음으로 테스트합니다.");
-  };
+      // --- MP3 재생 시스템 ---
+      const stopAudio = () => {
+        if (currentAudioRef.current) {
+          currentAudioRef.current.pause();
+          currentAudioRef.current.currentTime = 0;
+          currentAudioRef.current = null;
+        }
+      };
 
-  // --- 메인 타이머 루프 ---
-  useEffect(() => {
-    let interval;
-    
-    if (started) {
-      interval = setInterval(() => {
-        setCurrentTime((prev) => {
-          let nextTime = prev;
+      const playAudio = (type, fallbackText) => {
+        if (isMuted) return;
+        stopAudio(); 
+
+        const audioUrls = {
+          'ready1': './ready1.mp3',
+          'ready2': './ready2.mp3',
+          'start': './start.mp3',
+          'end': './end.mp3'
+        };
+
+        const targetUrl = audioUrls[type];
+        if (targetUrl) {
+          const audio = new Audio(targetUrl);
+          currentAudioRef.current = audio;
           
-          if (realTimeMode) {
-            const now = new Date();
-            nextTime = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-          } else if (isRunning) {
-            nextTime = prev + timeMultiplier;
-            if (nextTime >= 86400) nextTime = 0; // 자정 리셋
-          }
+          audio.onerror = () => {
+            console.warn(`오디오 파일(${targetUrl})을 찾을 수 없어 TTS로 대체합니다.`);
+            speak(fallbackText);
+          };
 
-          // 이벤트 체크
-          if (isRunning || realTimeMode) {
-            for (const [evtTime, evtData] of Object.entries(bellEvents)) {
-               const evtSeconds = timeToSeconds(evtTime);
-               if (evtSeconds > prev && evtSeconds <= nextTime && evtTime !== lastPlayedBellRef.current) {
-                 triggerEvent(evtData);
-                 lastPlayedBellRef.current = evtTime;
-               }
-            }
-          }
+          audio.play().catch(e => {
+            console.warn("오디오 재생 실패 (브라우저 정책 이슈 등):", e);
+            speak(fallbackText);
+          });
+        } else {
+          speak(fallbackText);
+        }
+      };
 
-          return nextTime;
+      const triggerEvent = (eventData) => {
+        setLastPlayedText(eventData.text);
+        playAudio(eventData.type, eventData.text);
+      };
+
+      const handleTestAudio = () => {
+        setLastPlayedText("오디오 테스트 (start.mp3)");
+        playAudio('start', "오디오 파일이 없어 기계음으로 대체 테스트합니다.");
+      };
+
+      useEffect(() => {
+        let interval;
+        if (started) {
+          interval = setInterval(() => {
+            setCurrentTime((prev) => {
+              let nextTime = prev;
+              if (realTimeMode) {
+                const now = new Date();
+                nextTime = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+              } else if (isRunning) {
+                nextTime = prev + timeMultiplier;
+                if (nextTime >= 86400) nextTime = 0; 
+              }
+
+              if (isRunning || realTimeMode) {
+                for (const [evtTime, evtData] of Object.entries(bellEvents)) {
+                   const evtSeconds = timeToSeconds(evtTime);
+                   if (evtSeconds > prev && evtSeconds <= nextTime && evtTime !== lastPlayedBellRef.current) {
+                     triggerEvent(evtData);
+                     lastPlayedBellRef.current = evtTime;
+                   }
+                }
+              }
+              return nextTime;
+            });
+          }, 1000);
+        }
+        return () => clearInterval(interval);
+      }, [started, isRunning, timeMultiplier, realTimeMode, isMuted]);
+
+      const getCurrentPeriod = () => {
+        for (const period of examSchedule) {
+          const startSec = timeToSeconds(period.start);
+          const endSec = timeToSeconds(period.end);
+          if (currentTime >= startSec && currentTime < endSec) {
+            return period;
+          }
+        }
+        return { name: '대기 중 / 일과 외 시간', type: 'idle' };
+      };
+
+      const currentPeriod = getCurrentPeriod();
+      
+      const jumpToTime = (timeStr, offsetMinutes = 1) => {
+        stopAudio();
+        setRealTimeMode(false);
+        setIsRunning(false);
+        const targetSec = timeToSeconds(timeStr) - (offsetMinutes * 60);
+        setCurrentTime(targetSec);
+        lastPlayedBellRef.current = null; 
+      };
+
+      const skipTime = (seconds) => {
+        if (realTimeMode) return;
+        stopAudio();
+        setCurrentTime((prev) => {
+          let newTime = prev + seconds;
+          if (newTime < 0) newTime += 86400;
+          if (newTime >= 86400) newTime -= 86400;
+          return newTime;
         });
-      }, 1000);
-    }
+        lastPlayedBellRef.current = null; 
+      };
 
-    return () => clearInterval(interval);
-  }, [started, isRunning, timeMultiplier, realTimeMode, isMuted]);
+      const startRealTime = () => {
+        stopAudio();
+        const now = new Date();
+        setCurrentTime(now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds());
+        setRealTimeMode(true);
+        setIsRunning(true);
+        lastPlayedBellRef.current = null;
+      };
 
-  // --- 현재 진행 상태 계산 ---
-  const getCurrentPeriod = () => {
-    for (const period of examSchedule) {
-      const startSec = timeToSeconds(period.start);
-      const endSec = timeToSeconds(period.end);
-      if (currentTime >= startSec && currentTime < endSec) {
-        return period;
-      }
-    }
-    return { name: '대기 중 / 일과 외 시간', type: 'idle' };
-  };
-
-  const currentPeriod = getCurrentPeriod();
-  
-  // --- 조작 함수 ---
-  const jumpToTime = (timeStr, offsetMinutes = 1) => {
-    stopAudio();
-    setRealTimeMode(false);
-    setIsRunning(false);
-    const targetSec = timeToSeconds(timeStr) - (offsetMinutes * 60);
-    setCurrentTime(targetSec);
-    lastPlayedBellRef.current = null; // 리셋
-  };
-
-  const skipTime = (seconds) => {
-    if (realTimeMode) return;
-    stopAudio();
-    setCurrentTime((prev) => {
-      let newTime = prev + seconds;
-      if (newTime < 0) newTime += 86400;
-      if (newTime >= 86400) newTime -= 86400;
-      return newTime;
-    });
-    lastPlayedBellRef.current = null; // 시간 이동 시 알림 초기화
-  };
-
-  const startRealTime = () => {
-    stopAudio();
-    const now = new Date();
-    setCurrentTime(now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds());
-    setRealTimeMode(true);
-    setIsRunning(true);
-    lastPlayedBellRef.current = null;
-  };
-
-  // --- 렌더링: 진입 화면 ---
-  if (!started) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white font-sans p-4">
-        <div className="max-w-md text-center space-y-8 bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700">
-          <Clock className="w-20 h-20 mx-auto text-blue-500 mb-4" />
-          <h1 className="text-3xl font-bold tracking-tight">수능/모의고사 실전 타이머</h1>
-          <p className="text-slate-400">
-            2022개정 교육과정 기준 실제 시험 시간표와<br/>사용자가 업로드한 MP3 음원을 사용합니다.
-          </p>
-          <div className="text-sm bg-slate-900 p-4 rounded-lg text-slate-300 border border-slate-700 text-left">
-            <ul className="list-disc pl-5 space-y-1">
-              <li><b>10분 전:</b> ready1.mp3</li>
-              <li><b>5분 전:</b> ready2.mp3</li>
-              <li><b>시작 시:</b> start.mp3</li>
-              <li><b>종료 시:</b> end.mp3</li>
-            </ul>
-          </div>
-          <button 
-            onClick={() => {
-              setStarted(true);
-              jumpToTime('08:40', 2); // 기본: 1교시 시작 2분 전
-            }}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-lg hover:shadow-blue-500/50 flex items-center justify-center gap-2 text-lg"
-          >
-            <Play className="w-5 h-5" /> 시작하기
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // --- 렌더링: 메인 타이머 화면 ---
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 font-sans flex flex-col items-center p-4 md:p-8">
-      {/* Header */}
-      <header className="w-full max-w-5xl flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-        <div className="flex items-center gap-3">
-          <CalendarDays className="w-6 h-6 text-blue-500" />
-          <h1 className="text-xl font-bold">2022개정 모의고사 실전 타이머</h1>
-        </div>
-        
-        <div className="flex items-center gap-2 bg-slate-900 rounded-lg p-1 border border-slate-800">
-          <button onClick={() => setRealTimeMode(false)} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${!realTimeMode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>가상 훈련</button>
-          <button onClick={startRealTime} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${realTimeMode ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-white'}`}>실시간 동기화</button>
-        </div>
-      </header>
-
-      <main className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Timer Display */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Main Clock Card */}
-          <div className="bg-slate-900 rounded-3xl p-8 border border-slate-800 shadow-xl flex flex-col items-center justify-center min-h-[400px] relative overflow-hidden">
-            
-            {/* Background Glow */}
-            <div className={`absolute -top-32 -left-32 w-64 h-64 rounded-full blur-3xl opacity-20 ${currentPeriod.type === 'exam' ? 'bg-red-500' : 'bg-blue-500'}`}></div>
-
-            <div className="text-center z-10 w-full">
-              <span className={`inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-6 border ${
-                  currentPeriod.type === 'exam' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 
-                  currentPeriod.type === 'break' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 
-                  'bg-slate-800 text-slate-400 border-slate-700'
-                }`}>
-                {currentPeriod.name}
-              </span>
-              
-              <div className="text-[15vw] md:text-9xl font-black tracking-tighter tabular-nums leading-none mb-6">
-                {formatTime(currentTime)}
+      if (!started) {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-4">
+            <div className="max-w-md text-center space-y-8 bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700">
+              <ClockIcon className="w-20 h-20 mx-auto text-blue-500 mb-4" />
+              <h1 className="text-3xl font-bold tracking-tight">수능/모의고사 실전 타이머</h1>
+              <p className="text-slate-400">
+                2022개정 교육과정 기준 실제 시험 시간표와<br/>사용자가 업로드한 MP3 음원을 사용합니다.
+              </p>
+              <div className="text-sm bg-slate-900 p-4 rounded-lg text-slate-300 border border-slate-700 text-left">
+                <ul className="list-disc pl-5 space-y-1">
+                  <li><b>10분 전:</b> ready1.mp3</li>
+                  <li><b>5분 전:</b> ready2.mp3</li>
+                  <li><b>시작 시:</b> start.mp3</li>
+                  <li><b>종료 시:</b> end.mp3</li>
+                </ul>
               </div>
-
-              {currentPeriod.type === 'exam' && (
-                <div className="text-xl text-slate-400 font-medium">
-                  종료까지 <span className="text-white font-bold">
-                    {Math.floor((timeToSeconds(currentPeriod.end) - currentTime) / 60)}분
-                    {' '}{(timeToSeconds(currentPeriod.end) - currentTime) % 60}초
-                  </span> 남음
-                </div>
-              )}
-            </div>
-
-            {/* Controls */}
-            {!realTimeMode && (
-              <div className="absolute bottom-8 flex items-center gap-3 z-10">
-                {/* 30초 뒤로 가기 */}
-                <button 
-                  onClick={() => skipTime(-30)} 
-                  className="w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-300 font-bold text-sm transition-colors"
-                  title="30초 뒤로"
-                >
-                  -30s
-                </button>
-
-                <button 
-                  onClick={() => setIsRunning(!isRunning)} 
-                  className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${isRunning ? 'bg-slate-700 hover:bg-slate-600' : 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/30'}`}
-                >
-                  {isRunning ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current ml-1" />}
-                </button>
-
-                {/* 30초 앞으로 가기 */}
-                <button 
-                  onClick={() => skipTime(30)} 
-                  className="w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-300 font-bold text-sm transition-colors"
-                  title="30초 앞으로"
-                >
-                  +30s
-                </button>
-
-                <button 
-                  onClick={() => jumpToTime('08:40', 2)} 
-                  className="w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-300 ml-2 transition-colors"
-                  title="1교시 처음으로"
-                >
-                  <RotateCcw className="w-5 h-5" />
-                </button>
-                
-                {/* Speed Controls (for testing) */}
-                <div className="bg-slate-800 border border-slate-700 rounded-full flex items-center p-1 ml-2 hidden sm:flex">
-                  {[1, 10, 60].map(speed => (
-                    <button 
-                      key={speed}
-                      onClick={() => setTimeMultiplier(speed)}
-                      className={`w-10 h-10 rounded-full text-xs font-bold transition-all ${timeMultiplier === speed ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-                    >
-                      {speed}x
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Audio Controls & Status */}
-          <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-4">
               <button 
                 onClick={() => {
-                  setIsMuted(!isMuted);
-                  if (!isMuted) stopAudio(); // 음소거 전환 시 오디오 즉시 정지
+                  setStarted(true);
+                  jumpToTime('08:40', 2); 
                 }}
-                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isMuted ? 'bg-red-500/20 text-red-400' : 'bg-slate-800 text-blue-400 hover:bg-slate-700'}`}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-lg hover:shadow-blue-500/50 flex items-center justify-center gap-2 text-lg"
               >
-                <Volume2 className="w-6 h-6" />
-                {isMuted && <div className="absolute w-8 border-t-2 border-current rotate-45"></div>}
+                <PlayIcon className="w-5 h-5" /> 시작하기
               </button>
-              <div>
-                <p className="font-medium text-slate-200">
-                  마지막 알림: <span className="text-blue-400">{lastPlayedText}</span>
-                </p>
-                <p className="text-sm text-slate-500">{isMuted ? '음소거됨' : 'MP3 오디오 활성화됨'}</p>
-              </div>
             </div>
-            <button 
-              onClick={handleTestAudio}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm font-medium transition-colors"
-            >
-              🔊 소리 테스트
-            </button>
           </div>
-        </div>
+        );
+      }
 
-        {/* Right Column: Timetable */}
-        <div className="bg-slate-900 rounded-3xl p-6 border border-slate-800 h-[600px] overflow-y-auto custom-scrollbar">
-          <h2 className="text-lg font-bold mb-6 flex items-center gap-2 sticky top-0 bg-slate-900 pb-2 border-b border-slate-800 z-10">
-            시간표 및 빠른 이동
-          </h2>
-          <div className="space-y-3 relative">
-            {/* Timeline Line */}
-            <div className="absolute left-[27px] top-4 bottom-4 w-px bg-slate-800 z-0"></div>
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col items-center p-4 md:p-8">
+          <header className="w-full max-w-5xl flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+            <div className="flex items-center gap-3">
+              <CalendarDaysIcon className="w-6 h-6 text-blue-500" />
+              <h1 className="text-xl font-bold">2022개정 모의고사 실전 타이머</h1>
+            </div>
+            <div className="flex items-center gap-2 bg-slate-900 rounded-lg p-1 border border-slate-800">
+              <button onClick={() => setRealTimeMode(false)} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${!realTimeMode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>가상 훈련</button>
+              <button onClick={startRealTime} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${realTimeMode ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-white'}`}>실시간 동기화</button>
+            </div>
+          </header>
 
-            {examSchedule.map((item, idx) => {
-              const startSec = timeToSeconds(item.start);
-              const endSec = timeToSeconds(item.end);
-              const isActive = currentTime >= startSec && currentTime < endSec;
-              const isPast = currentTime >= endSec;
-
-              return (
-                <div 
-                  key={idx} 
-                  className={`relative z-10 flex gap-4 p-3 rounded-xl transition-all cursor-pointer group ${isActive ? 'bg-blue-600/20 border border-blue-500/30' : 'hover:bg-slate-800'}`}
-                  onClick={() => !realTimeMode && jumpToTime(item.start, 2)}
-                  title={!realTimeMode ? "시작 2분 전으로 이동" : "실시간 모드에서는 이동 불가"}
-                >
-                  <div className={`w-3 h-3 mt-1.5 rounded-full flex-shrink-0 ${isActive ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' : isPast ? 'bg-slate-700' : 'bg-slate-600'}`} />
-                  <div className={`flex-1 ${isPast ? 'opacity-40' : 'opacity-100'}`}>
-                    <div className="flex justify-between items-start mb-1">
-                      <p className={`font-bold ${isActive ? 'text-blue-400' : 'text-slate-200'}`}>{item.name}</p>
-                      <span className="text-xs font-mono text-slate-400 bg-slate-950 px-2 py-1 rounded">
-                        {item.start} - {item.end}
-                      </span>
-                    </div>
-                    {item.type === 'exam' && (
-                      <p className="text-xs text-slate-500">{Math.floor((endSec - startSec) / 60)}분간 진행</p>
-                    )}
+          <main className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-slate-900 rounded-3xl p-8 border border-slate-800 shadow-xl flex flex-col items-center justify-center min-h-[400px] relative overflow-hidden">
+                <div className={`absolute -top-32 -left-32 w-64 h-64 rounded-full blur-3xl opacity-20 ${currentPeriod.type === 'exam' ? 'bg-red-500' : 'bg-blue-500'}`}></div>
+                <div className="text-center z-10 w-full">
+                  <span className={`inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-6 border ${
+                      currentPeriod.type === 'exam' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 
+                      currentPeriod.type === 'break' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 
+                      'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}>
+                    {currentPeriod.name}
+                  </span>
+                  <div className="text-[15vw] md:text-9xl font-black tracking-tighter tabular-nums leading-none mb-6">
+                    {formatTime(currentTime)}
                   </div>
-
-                  {/* Play icon on hover (only in virtual mode) */}
-                  {!realTimeMode && !isActive && !isPast && (
-                    <div className="opacity-0 group-hover:opacity-100 absolute right-4 top-1/2 -translate-y-1/2 bg-blue-600 rounded-full p-2 shadow-lg">
-                      <Play className="w-3 h-3 fill-current text-white ml-0.5" />
+                  {currentPeriod.type === 'exam' && (
+                    <div className="text-xl text-slate-400 font-medium">
+                      종료까지 <span className="text-white font-bold">
+                        {Math.floor((timeToSeconds(currentPeriod.end) - currentTime) / 60)}분
+                        {' '}{(timeToSeconds(currentPeriod.end) - currentTime) % 60}초
+                      </span> 남음
                     </div>
                   )}
                 </div>
-              );
-            })}
-          </div>
+
+                {!realTimeMode && (
+                  <div className="absolute bottom-8 flex items-center gap-3 z-10">
+                    <button onClick={() => skipTime(-30)} className="w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-300 font-bold text-sm transition-colors" title="30초 뒤로">-30s</button>
+                    <button onClick={() => setIsRunning(!isRunning)} className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${isRunning ? 'bg-slate-700 hover:bg-slate-600' : 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/30'}`}>
+                      {isRunning ? <PauseIcon className="w-6 h-6 fill-current" /> : <PlayIcon className="w-6 h-6 fill-current ml-1" />}
+                    </button>
+                    <button onClick={() => skipTime(30)} className="w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-300 font-bold text-sm transition-colors" title="30초 앞으로">+30s</button>
+                    <button onClick={() => jumpToTime('08:40', 2)} className="w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-300 ml-2 transition-colors" title="1교시 처음으로"><RotateCcwIcon className="w-5 h-5" /></button>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <button onClick={() => { setIsMuted(!isMuted); if (!isMuted) stopAudio(); }} className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isMuted ? 'bg-red-500/20 text-red-400' : 'bg-slate-800 text-blue-400 hover:bg-slate-700'}`}>
+                    <Volume2Icon className="w-6 h-6" />
+                    {isMuted && <div className="absolute w-8 border-t-2 border-current rotate-45"></div>}
+                  </button>
+                  <div>
+                    <p className="font-medium text-slate-200 text-sm sm:text-base">
+                      마지막 알림: <span className="text-blue-400">{lastPlayedText}</span>
+                    </p>
+                    <p className="text-xs sm:text-sm text-slate-500">{isMuted ? '음소거됨' : 'MP3 오디오 활성화됨'}</p>
+                  </div>
+                </div>
+                <button onClick={handleTestAudio} className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm font-medium transition-colors whitespace-nowrap">
+                  🔊 소리 테스트
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 rounded-3xl p-6 border border-slate-800 h-[600px] overflow-y-auto custom-scrollbar">
+              <h2 className="text-lg font-bold mb-6 flex items-center gap-2 sticky top-0 bg-slate-900 pb-2 border-b border-slate-800 z-10">시간표 및 빠른 이동</h2>
+              <div className="space-y-3 relative">
+                <div className="absolute left-[27px] top-4 bottom-4 w-px bg-slate-800 z-0"></div>
+                {examSchedule.map((item, idx) => {
+                  const startSec = timeToSeconds(item.start);
+                  const endSec = timeToSeconds(item.end);
+                  const isActive = currentTime >= startSec && currentTime < endSec;
+                  const isPast = currentTime >= endSec;
+
+                  return (
+                    <div key={idx} className={`relative z-10 flex gap-4 p-3 rounded-xl transition-all cursor-pointer group ${isActive ? 'bg-blue-600/20 border border-blue-500/30' : 'hover:bg-slate-800'}`} onClick={() => !realTimeMode && jumpToTime(item.start, 2)}>
+                      <div className={`w-3 h-3 mt-1.5 rounded-full flex-shrink-0 ${isActive ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' : isPast ? 'bg-slate-700' : 'bg-slate-600'}`} />
+                      <div className={`flex-1 ${isPast ? 'opacity-40' : 'opacity-100'}`}>
+                        <div className="flex justify-between items-start mb-1">
+                          <p className={`font-bold ${isActive ? 'text-blue-400' : 'text-slate-200'}`}>{item.name}</p>
+                          <span className="text-xs font-mono text-slate-400 bg-slate-950 px-2 py-1 rounded">{item.start} - {item.end}</span>
+                        </div>
+                        {item.type === 'exam' && <p className="text-xs text-slate-500">{Math.floor((endSec - startSec) / 60)}분간 진행</p>}
+                      </div>
+                      {!realTimeMode && !isActive && !isPast && (
+                        <div className="opacity-0 group-hover:opacity-100 absolute right-4 top-1/2 -translate-y-1/2 bg-blue-600 rounded-full p-2 shadow-lg">
+                          <PlayIcon className="w-3 h-3 fill-current text-white ml-0.5" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </main>
         </div>
-      </main>
+      );
+    }
 
-      <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
-      `}} />
-    </div>
-  );
-}
-
-
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
 
